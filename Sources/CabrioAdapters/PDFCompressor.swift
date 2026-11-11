@@ -35,8 +35,13 @@ enum PDFCompressor {
 
         var maxLongInches = 8.5
         for i in 0..<doc.pageCount {
-            if let b = doc.page(at: i)?.bounds(for: .mediaBox) { maxLongInches = max(maxLongInches, Double(max(b.width, b.height)) / 72) }
+            if let b = doc.page(at: i)?.bounds(for: .mediaBox) {
+                let long = Double(max(b.width, b.height)) / 72
+                if long.isFinite { maxLongInches = max(maxLongInches, long) }
+            }
         }
+        // Un /MediaBox falso (hasta 14 400 pt por especificación) no debe anular la reducción de imágenes.
+        maxLongInches = min(maxLongInches, PDFLimits.maxPageInches)
         // Se trabaja sobre los bytes originales: reescribir con PDFKit pierde parte del mapa de texto.
         guard let original = try? Data(contentsOf: input, options: .mappedIfSafe), let file = try? PDFRawFile(data: original), !file.isEncrypted else {
             return try copyOriginal(input, output, originalBytes, target)
@@ -119,7 +124,7 @@ enum PDFCompressor {
         for e in file.extents {
             // Descarte rápido: solo se analizan los objetos cuya cabecera menciona /Image.
             let headEnd = min(e.offset + 400, e.end)
-            let head = String(decoding: file.bytes[e.offset..<headEnd], as: UTF8.self)
+            let head = String(decoding: file.bytes[e.offset..<max(headEnd, e.offset)], as: UTF8.self)
             guard head.contains("/Image"), let parsed = file.parse(e.number),
                   case .dict(let d) = parsed.value, d["Subtype"]?.name == "Image",
                   let stream = parsed.stream, Set(d.keys).isSubset(of: allowedKeys),
@@ -129,11 +134,12 @@ enum PDFCompressor {
         return result
     }
 
-    static func components(_ cs: PDFValue?, in file: PDFRawFile) -> Int? {
+    static func components(_ cs: PDFValue?, in file: PDFRawFile, depth: Int = 0) -> Int? {
+        guard depth < 8 else { return nil }   // «6 0 obj 6 0 R»: una cadena de referencias no puede ser infinita
         switch cs {
         case .raw(let r)? where r.hasSuffix(" R"):
             guard let ref = PDFValue.raw(r).refNumber, let inner = file.parse(ref)?.value else { return nil }
-            return components(inner, in: file)
+            return components(inner, in: file, depth: depth + 1)
         case .raw("/DeviceRGB")?: return 3
         case .raw("/DeviceGray")?: return 1
         case .array(let a)?:
@@ -150,6 +156,7 @@ enum PDFCompressor {
         let slice = file.bytes[img.stream]
         if f[0] == "DCTDecode" {
             guard let src = CGImageSourceCreateWithData(Data(slice) as CFData, nil),
+                  dimensionsAreSafe(src),
                   let cg = CGImageSourceCreateImageAtIndex(src, 0, nil), let model = cg.colorSpace?.model else { return nil }
             if model == .rgb { return (cg, false) }
             if model == .monochrome { return (cg, true) }
@@ -158,7 +165,9 @@ enum PDFCompressor {
         guard f[0] == "FlateDecode",
               let w = file.intValue(of: img.dict["Width"]), let h = file.intValue(of: img.dict["Height"]),
               file.intValue(of: img.dict["BitsPerComponent"]) == 8,
-              let comps = components(img.dict["ColorSpace"], in: file), w * h >= 100_000 else { return nil }
+              let comps = components(img.dict["ColorSpace"], in: file),
+              (1...PDFLimits.maxSide).contains(w), (1...PDFLimits.maxSide).contains(h),
+              w * h >= 100_000, w * h <= PDFLimits.maxPixels else { return nil }
         let parms = PDFCodec.decodeParms(img.dict)
         let predictor = parms["Predictor"]?.int ?? 1
         let colors = parms["Colors"]?.int ?? comps
@@ -166,8 +175,14 @@ enum PDFCompressor {
         guard colors == comps, columns == w, predictor == 1 || predictor >= 10 else { return nil }
         let rowBytes = w * comps
         let expected = h * (rowBytes + (predictor >= 10 ? 1 : 0))
-        guard var raw = PDFCodec.inflate(slice, hint: expected), raw.count == expected else { return nil }
-        if predictor >= 10 { raw = PDFCodec.unfilterPNG(raw, rowBytes: rowBytes, bpp: comps, rows: h) }
+        // Con lados ≤ 20 000, w·h ≤ 100 Mpx y ≤ 3 componentes no hay desbordes; el tope de salida es el tamaño
+        // esperado, así un /Width y /Height falsos o una bomba Flate se descartan sin reservar memoria.
+        guard expected <= PDFLimits.maxInflatedBytes,
+              var raw = PDFCodec.inflate(slice, hint: expected, limit: expected), raw.count == expected else { return nil }
+        if predictor >= 10 {
+            guard let un = PDFCodec.unfilterPNG(raw, rowBytes: rowBytes, bpp: comps, rows: h) else { return nil }
+            raw = un
+        }
         let space = comps == 3 ? CGColorSpaceCreateDeviceRGB() : CGColorSpaceCreateDeviceGray()
         guard let provider = CGDataProvider(data: Data(raw) as CFData),
               let cg = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 8 * comps, bytesPerRow: rowBytes,
@@ -175,6 +190,16 @@ enum PDFCompressor {
                                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
         else { return nil }
         return (cg, comps == 1)
+    }
+
+    /// Comprueba las dimensiones de un JPEG con los metadatos, antes de decodificarlo (bomba de píxeles).
+    private static func dimensionsAreSafe(_ src: CGImageSource) -> Bool {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+              let h = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+              (1...PDFLimits.maxSide).contains(w), (1...PDFLimits.maxSide).contains(h) else { return false }
+        let (pixels, overflow) = w.multipliedReportingOverflow(by: h)
+        return !overflow && pixels <= PDFLimits.maxPixels
     }
 
     static func recompress(_ cg: CGImage, gray: Bool, _ s: Setting, maxLongInches: Double) -> (data: Data, w: Int, h: Int)? {

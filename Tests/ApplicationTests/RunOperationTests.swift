@@ -199,6 +199,9 @@ final class RunOperationTests: XCTestCase {
         XCTAssertFalse("\(entry.operation) \(entry)".contains("ok\""), "la contraseña no debe verse en descripciones")
         let json = String(decoding: try JSONEncoder().encode(entry.operation), as: UTF8.self)
         XCTAssertFalse(json.contains("ok"), json)
+        // En memoria tampoco se conserva: el historial guarda la operación con la contraseña vacía.
+        guard case .protectPDF(let kept) = entry.operation else { return XCTFail("operación inesperada") }
+        XCTAssertEqual(kept.value, "")
         do { _ = try await run(.unlockPDF(password: SecretRef("x")), inputs: [dir.appendingPathComponent("b.pdf")]); XCTFail() }
         catch { XCTAssertEqual(error as? CabrioError, .wrongPassword("b.pdf")) }
     }
