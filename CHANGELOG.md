@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.9.2 — Seguridad
+- **Las reglas de carpetas ya no se disparan a sí mismas.** «Convertir a JPG» sobre una carpeta vigilada ya no crea `a-2.jpg`, `a-2-2.jpg`… sin fin: ignora lo que Cabrio mismo genera, no convierte un archivo que ya tiene el formato destino y deja de procesar un archivo tras 3 pasadas en 60 s, avisando en la regla. Lo mismo ocurre con reglas que se mueven archivos entre sí.
+- **Las reglas por antigüedad ya no actúan sobre archivos recién llegados.** Antes, un `.dmg` antiguo copiado a Descargas podía ir a la Papelera a los 2 segundos. Ahora solo actúan en el barrido programado o con «Ejecutar ahora».
+- **Las reglas que mandan a la Papelera o dependen de la antigüedad piden aprobación** («Aprobar…», con la cuenta de archivos afectados) antes de actuar solas. Las reglas de estos tipos que ya tenías quedan pendientes hasta que las apruebes.
+- No se pueden vigilar carpetas como `/`, tu carpeta personal, `/Applications` o `~/Library`.
+- **Un PDF dañado o malicioso ya no cierra Cabrio.** El lector de PDF valida estructura, tamaños y dimensiones, y limita memoria y recursión; ante un archivo así muestra un error. Los PDF normales se comprimen y protegen igual que antes.
+- El historial ya no guarda en memoria la contraseña de los PDF protegidos, y un fallo al generar el cifrado produce un error en lugar de un PDF dañado.
+
 ## 0.9.1 — Corrección
 - Los botones principales («Mostrar en Finder», «Proteger», «Comprimir»…) no se leían en modo oscuro: el texto y el fondo tenían casi el mismo color. Ahora usan un estilo propio que invierte los colores del tema (revisado en claro y en oscuro, con el estado desactivado).
 
