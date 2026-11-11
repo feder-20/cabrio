@@ -42,12 +42,12 @@ final class RuleTests: XCTestCase {
         let watcher: FakeWatcher; let engines: FakeEngines; let run: RunOperation
     }
 
-    func rig(rules: [Rule], now: Date = Date(timeIntervalSince1970: 1_800_000_000), failImage: String? = nil) -> Rig {
+    func rig(rules: [Rule], now: Date = Date(timeIntervalSince1970: 1_800_000_000), failImage: String? = nil, ownTTL: TimeInterval = 120) -> Rig {
         let fs = FakeFS(), store = FakeRuleStore(), history = FakeHistory(), watcher = FakeWatcher()
         store.rules = rules
         let e = FakeEngines(fs: fs, failOnImage: failImage)
         let runner = RuleRunner(store: store, fileSystem: fs, detector: FakeDetector(), image: e, history: history, watcher: watcher,
-                                now: { now }, stability: .milliseconds(5), sweepInterval: .seconds(3600))
+                                now: { now }, stability: .milliseconds(5), sweepInterval: .seconds(3600), ownOutputTTL: ownTTL)
         let run = RunOperation(pdf: e, image: e, archive: e, media: e, ocr: e, fileSystem: fs, history: history)
         return Rig(runner: runner, fs: fs, store: store, history: history, watcher: watcher, engines: e, run: run)
     }
@@ -208,7 +208,7 @@ final class RuleTests: XCTestCase {
     }
 
     func testAgeRulesAreSweptAndOnlyWhenOldEnough() async throws {
-        let rule = Rule(name: "Viejos", folder: downloads, condition: RuleCondition(extensions: ["zip"], olderThanDays: 30), actions: [.moveToTrash])
+        let rule = Rule(name: "Viejos", folder: downloads, condition: RuleCondition(extensions: ["zip"], olderThanDays: 30), actions: [.moveToTrash], isApproved: true)
         let now = created.addingTimeInterval(31 * 86_400)
         let r = rig(rules: [rule], now: now)
         seed(r, ["viejo.zip", "nuevo.zip"])
@@ -233,5 +233,161 @@ final class RuleTests: XCTestCase {
         for await e in r.runner.events { first = e; break }
         guard case .failed(let m)? = first else { return XCTFail("\(String(describing: first))") }
         XCTAssertTrue(m.contains("malo.heic"))
+    }
+
+    // MARK: Seguridad: autodisparo, ciclos y aprobación
+
+    func convertRule() -> Rule {
+        Rule(name: "Imágenes a JPG", folder: downloads, condition: RuleCondition(kinds: [.image]), actions: [.convertImage(.jpg)])
+    }
+
+    func testConvertImageSkipsFilesAlreadyInTargetFormat() async throws {
+        let rule = convertRule()
+        let r = rig(rules: [rule])
+        seed(r, ["a.jpg", "b.JPEG", "c.png"])
+        let done = await r.runner.runNow(rule)
+        XCTAssertEqual(done.count, 1, "solo c.png se convierte")
+        XCTAssertTrue(has(r, downloads.appendingPathComponent("c.jpg").path))
+        XCTAssertFalse(has(r, downloads.appendingPathComponent("a-2.jpg").path))
+        XCTAssertFalse(has(r, downloads.appendingPathComponent("b-2.jpg").path))
+    }
+
+    func testConvertImageDoesNotRetriggerOnItsOwnOutput() async throws {
+        let r = rig(rules: [convertRule()])
+        seed(r, ["a.png"])
+        await r.runner.reload()
+        r.watcher.send(downloads.appendingPathComponent("a.png"), in: downloads)
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertTrue(has(r, downloads.appendingPathComponent("a.jpg").path))
+        // FSEvents reporta la salida como archivo nuevo, varias veces.
+        for _ in 0..<3 {
+            r.watcher.send(downloads.appendingPathComponent("a.jpg"), in: downloads)
+            try await Task.sleep(for: .milliseconds(60))
+        }
+        XCTAssertEqual(r.fs.files.filter { $0.hasPrefix(downloads.path) }.sorted(),
+                       [downloads.appendingPathComponent("a.jpg").path, downloads.appendingPathComponent("a.png").path].sorted())
+        XCTAssertEqual(r.history.items.count, 1)
+        await r.runner.stop()
+    }
+
+    func testConvertImageWithoutOwnPathGuardStillStopsOnSameFormat() async throws {
+        // Aun con el registro de salidas propias desactivado, la regla no se autodispara.
+        let r = rig(rules: [convertRule()], ownTTL: 0)
+        seed(r, ["a.png"])
+        await r.runner.reload()
+        r.watcher.send(downloads.appendingPathComponent("a.png"), in: downloads)
+        try await Task.sleep(for: .milliseconds(100))
+        r.watcher.send(downloads.appendingPathComponent("a.jpg"), in: downloads)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertFalse(has(r, downloads.appendingPathComponent("a-2.jpg").path))
+        await r.runner.stop()
+    }
+
+    func pingPongRules() -> (Rule, Rule, URL, URL) {
+        let a = URL(fileURLWithPath: "/Users/x/A"), b = URL(fileURLWithPath: "/Users/x/B")
+        let ab = Rule(name: "A a B", folder: a, condition: RuleCondition(kinds: [.pdf]), actions: [.moveTo(folder: b, subfolder: .none)])
+        let ba = Rule(name: "B a A", folder: b, condition: RuleCondition(kinds: [.pdf]), actions: [.moveTo(folder: a, subfolder: .none)])
+        return (ab, ba, a, b)
+    }
+
+    func testPingPongBetweenWatchedFoldersIgnoresOwnMoves() async throws {
+        let (ab, ba, a, b) = pingPongRules()
+        let r = rig(rules: [ab, ba])
+        seed(r, ["x.pdf"], in: a)
+        await r.runner.reload()
+        r.watcher.send(a.appendingPathComponent("x.pdf"), in: a)
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertTrue(has(r, b.appendingPathComponent("x.pdf").path))
+        r.watcher.send(b.appendingPathComponent("x.pdf"), in: b)   // el evento de la propia llegada
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertTrue(has(r, b.appendingPathComponent("x.pdf").path), "no regresa a A")
+        XCTAssertEqual(r.fs.moveLog.count, 1)
+        await r.runner.stop()
+    }
+
+    func testCycleCapStopsAfterThreeRunsAndWarns() async throws {
+        let (ab, ba, a, b) = pingPongRules()
+        let r = rig(rules: [ab, ba], ownTTL: 0)   // sin registro de salidas: solo actúa el tope de ciclos
+        seed(r, ["x.pdf"], in: a)
+        await r.runner.reload()
+        for _ in 0..<8 {
+            let inA = has(r, a.appendingPathComponent("x.pdf").path)
+            let dir = inA ? a : b
+            r.watcher.send(dir.appendingPathComponent("x.pdf"), in: dir)
+            try await Task.sleep(for: .milliseconds(80))
+        }
+        XCTAssertEqual(r.fs.moveLog.count, 3, "tope de 3 procesos por archivo en 60 s: \(r.fs.moveLog)")
+        let warnings = await r.runner.ruleWarnings
+        XCTAssertFalse(warnings.isEmpty, "queda un aviso en el estado de la regla")
+        XCTAssertTrue(warnings.values.first?.contains("x.pdf") == true)
+        await r.runner.stop()
+    }
+
+    func testAgeRuleIsNotTriggeredByFileEvent() async throws {
+        let rule = Rule(name: "Instaladores viejos", folder: downloads,
+                        condition: RuleCondition(extensions: ["dmg"], olderThanDays: 14), actions: [.moveToTrash], isApproved: true)
+        let now = created.addingTimeInterval(400 * 86_400)
+        let r = rig(rules: [rule], now: now)
+        await r.runner.reload()
+        try await Task.sleep(for: .milliseconds(60))   // deja pasar el barrido inicial (no encuentra nada)
+        seed(r, ["recien-copiado.dmg"])    // creado en 2023 según el fake: «viejo» para la regla
+        r.watcher.send(downloads.appendingPathComponent("recien-copiado.dmg"), in: downloads)
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertTrue(r.fs.trashed.isEmpty, "el evento de un archivo nuevo no activa reglas por antigüedad")
+        XCTAssertTrue(has(r, downloads.appendingPathComponent("recien-copiado.dmg").path))
+        await r.runner.stop()
+    }
+
+    func testUnapprovedAgeAndTrashRulesDoNotActAutomatically() async throws {
+        let age = Rule(name: "Viejos", folder: downloads, condition: RuleCondition(extensions: ["zip"], olderThanDays: 30), actions: [.moveToTrash])
+        let trash = Rule(name: "Papelera", folder: docs, condition: RuleCondition(extensions: ["dmg"]), actions: [.moveToTrash])
+        XCTAssertTrue(age.requiresApproval && trash.requiresApproval)
+        let now = created.addingTimeInterval(400 * 86_400)
+        let r = rig(rules: [age, trash], now: now)
+        seed(r, ["viejo.zip"])
+        seed(r, ["app.dmg"], in: docs)
+        await r.runner.reload()    // el barrido inicial no debe actuar
+        r.watcher.send(docs.appendingPathComponent("app.dmg"), in: docs)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertTrue(r.fs.trashed.isEmpty, "sin aprobar no actúa: \(r.fs.trashed)")
+        await r.runner.stop()
+
+        // Aprobadas, sí actúan.
+        var approvedAge = age; approvedAge.isApproved = true
+        var approvedTrash = trash; approvedTrash.isApproved = true
+        let r2 = rig(rules: [approvedAge, approvedTrash], now: now)
+        seed(r2, ["viejo.zip"])
+        seed(r2, ["app.dmg"], in: docs)
+        await r2.runner.reload()
+        r2.watcher.send(docs.appendingPathComponent("app.dmg"), in: docs)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(Set(r2.fs.trashed), [downloads.appendingPathComponent("viejo.zip").path, docs.appendingPathComponent("app.dmg").path])
+        await r2.runner.stop()
+    }
+
+    func testRuleDecodedWithoutApprovalFieldIsNotApproved() throws {
+        let rule = Rule(name: "Viejas", folder: downloads, condition: RuleCondition(extensions: ["dmg"], olderThanDays: 14),
+                        actions: [.moveToTrash], isApproved: true)
+        let data = try JSONEncoder().encode(rule)
+        var obj = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(obj["isApproved"] as? Bool, true)
+        obj.removeValue(forKey: "isApproved")   // archivo de una versión anterior
+        let old = try JSONDecoder().decode(Rule.self, from: JSONSerialization.data(withJSONObject: obj))
+        XCTAssertFalse(old.isApproved)
+        XCTAssertFalse(old.mayRunUnattended)
+        XCTAssertEqual(try JSONDecoder().decode(Rule.self, from: data).isApproved, true)
+        XCTAssertTrue(Rule(name: "M", folder: downloads, condition: RuleCondition(kinds: [.pdf]), actions: [.moveTo(folder: docs, subfolder: .none)]).mayRunUnattended,
+                      "mover/convertir no exige aprobación")
+    }
+
+    func testForbiddenWatchedFolders() {
+        let home = URL(fileURLWithPath: "/Users/x")
+        for p in ["/", "/Users/x", "/Applications", "/System", "/System/Library", "/Library", "/Library/Caches", "/Users/x/Library",
+                  "/Users/x/Library/Mail", "/usr/local", "/Users/x/"] {
+            XCTAssertTrue(RuleFolderPolicy.isForbidden(URL(fileURLWithPath: p), home: home), p)
+        }
+        for p in ["/Users/x/Downloads", "/Users/x/Escritorio", "/Users/x/Documents/Facturas", "/Volumes/Datos", "/Users/x/Libraryfoo"] {
+            XCTAssertFalse(RuleFolderPolicy.isForbidden(URL(fileURLWithPath: p), home: home), p)
+        }
     }
 }

@@ -24,7 +24,7 @@ final class RulesModel: ObservableObject {
             for await event in events {
                 switch event {
                 case .applied: await self?.refreshActivity()
-                case .failed(let m): self?.message = m
+                case .failed(let m), .warning(let m): self?.message = m
                 }
             }
         }
@@ -40,8 +40,35 @@ final class RulesModel: ObservableObject {
         Task { await services.ruleRunner.setEnabled(on) }
     }
 
-    func save(_ rule: Rule) {
-        if let i = rules.firstIndex(where: { $0.id == rule.id }) { rules[i] = rule } else { rules.append(rule) }
+    /// Mensaje de error si la carpeta no se puede vigilar (raíz, home, Aplicaciones, sistema, Library); nil si vale.
+    static func folderError(_ url: URL) -> String? {
+        RuleFolderPolicy.isForbidden(url)
+            ? L("Esa carpeta es demasiado amplia o pertenece al sistema. Elige una carpeta concreta, como Descargas o Escritorio.")
+            : nil
+    }
+
+    /// Guarda la regla. Devuelve false (y deja el motivo en `message`) si la carpeta vigilada no está permitida.
+    /// La aprobación solo se conserva si no cambió lo que la regla afecta.
+    @discardableResult
+    func save(_ rule: Rule) -> Bool {
+        if let error = Self.folderError(rule.folder) { message = error; return false }
+        var r = rule
+        if let i = rules.firstIndex(where: { $0.id == rule.id }) {
+            r.isApproved = rules[i].isApproved && rules[i].sameScope(as: r)
+            rules[i] = r
+        } else {
+            r.isApproved = false
+            rules.append(r)
+        }
+        message = nil
+        persist()
+        return true
+    }
+
+    /// El usuario confirmó, viendo cuántos archivos afectaría, que la regla actúe sola.
+    func approve(_ rule: Rule) {
+        guard let i = rules.firstIndex(where: { $0.id == rule.id }) else { return }
+        rules[i].isApproved = true
         persist()
     }
 

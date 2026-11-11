@@ -249,3 +249,12 @@
 "Instalar" = "Install";
 "Quitar acción" = "Remove";
 "Si no aparece, actívala en Ajustes del Sistema → Teclado → Atajos de teclado → Servicios → Archivos y carpetas." = "If it does not appear, turn it on in System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders.";
+
+"Esa carpeta es demasiado amplia o pertenece al sistema. Elige una carpeta concreta, como Descargas o Escritorio." = "That folder is too broad or belongs to the system. Choose a specific folder, such as Downloads or Desktop.";
+"Pendiente de confirmar: no actuará sola hasta que la apruebes." = "Pending confirmation: it will not act on its own until you approve it.";
+"Aprobar…" = "Approve…";
+"Aprobar" = "Approve";
+"¿Aprobar que la regla actúe sola?" = "Let this rule act on its own?";
+"Ahora mismo no hay archivos que coincidan. Cuando lleguen, la regla actuará sola y podrás deshacerlo." = "No files match right now. When some arrive, the rule will act on its own and you will be able to undo it.";
+"Ahora mismo afectaría a %d archivos, por ejemplo: %@. A partir de aquí actuará sola; podrás deshacerlo." = "Right now it would affect %d files, for example: %@. From here on it will act on its own; you will be able to undo it.";
+"«%@» se dejó de procesar: las reglas lo han movido o convertido demasiadas veces seguidas (posible ciclo entre reglas). Revisa «%@»." = "“%@” was no longer processed: rules have moved or converted it too many times in a row (possible loop between rules). Check “%@”.";

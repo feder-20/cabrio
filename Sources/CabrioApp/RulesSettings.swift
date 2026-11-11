@@ -5,6 +5,7 @@ struct RulesSettings: View {
     @ObservedObject var model: RulesModel
     @State private var editing: Rule?
     @State private var confirmRun: (Rule, [URL])?
+    @State private var confirmApprove: (Rule, [URL])?
 
     var body: some View {
         Form {
@@ -23,8 +24,15 @@ struct RulesSettings: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(rule.name).fontWeight(.medium)
                             Text(RulesModel.summary(rule)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            if rule.requiresApproval && !rule.isApproved {
+                                Text(L("Pendiente de confirmar: no actuará sola hasta que la apruebes."))
+                                    .font(.caption).foregroundStyle(.orange)
+                            }
                         }
                         Spacer()
+                        if rule.requiresApproval && !rule.isApproved {
+                            Button(L("Aprobar…")) { Task { confirmApprove = (rule, await model.preview(rule)) } }.font(.caption)
+                        }
                         Button(L("Ejecutar ahora")) { Task { confirmRun = (rule, await model.preview(rule)) } }.font(.caption)
                         Button { editing = rule } label: { Image(systemName: "pencil") }.buttonStyle(.plain)
                         Button { model.delete(rule) } label: { Image(systemName: "trash") }.buttonStyle(.plain)
@@ -60,12 +68,26 @@ struct RulesSettings: View {
         .formStyle(.grouped)
         .sheet(item: $editing) { rule in RuleEditor(model: model, rule: rule) { editing = nil } }
         .alert(L("¿Ejecutar la regla ahora?"), isPresented: Binding(get: { confirmRun != nil }, set: { if !$0 { confirmRun = nil } })) {
-            Button(L("Ejecutar")) { if let (r, _) = confirmRun { Task { _ = await model.runNow(r) } } }
+            Button(L("Ejecutar")) {
+                if let (r, _) = confirmRun {
+                    // Ya vio cuántos archivos afecta: esta confirmación también aprueba la regla.
+                    if r.requiresApproval { model.approve(r) }
+                    Task { _ = await model.runNow(r) }
+                }
+            }
             Button(L("Cancelar"), role: .cancel) {}
         } message: {
             let files = confirmRun?.1 ?? []
             Text(files.isEmpty ? L("Ahora mismo no hay archivos que coincidan.")
                  : L("Afectará a %d archivos, por ejemplo: %@. Podrás deshacerlo.", files.count, files.prefix(3).map(\.lastPathComponent).joined(separator: ", ")))
+        }
+        .alert(L("¿Aprobar que la regla actúe sola?"), isPresented: Binding(get: { confirmApprove != nil }, set: { if !$0 { confirmApprove = nil } })) {
+            Button(L("Aprobar")) { if let (r, _) = confirmApprove { model.approve(r) } }
+            Button(L("Cancelar"), role: .cancel) {}
+        } message: {
+            let files = confirmApprove?.1 ?? []
+            Text(files.isEmpty ? L("Ahora mismo no hay archivos que coincidan. Cuando lleguen, la regla actuará sola y podrás deshacerlo.")
+                 : L("Ahora mismo afectaría a %d archivos, por ejemplo: %@. A partir de aquí actuará sola; podrás deshacerlo.", files.count, files.prefix(3).map(\.lastPathComponent).joined(separator: ", ")))
         }
         .onAppear { Task { await model.refreshActivity() } }
     }
@@ -102,7 +124,11 @@ struct RuleEditor: View {
                 HStack {
                     Text(L("Carpeta vigilada")); Spacer()
                     Text(rule.folder.lastPathComponent).foregroundStyle(.secondary)
-                    Button(L("Elegir…")) { if let (u, b) = RulesModel.pickFolder(start: rule.folder, prompt: L("Vigilar")) { rule.folder = u; rule.bookmark = b } }
+                    Button(L("Elegir…")) {
+                        if let (u, b) = RulesModel.pickFolder(start: rule.folder, prompt: L("Vigilar")) {
+                            if let error = RulesModel.folderError(u) { testResult = error } else { rule.folder = u; rule.bookmark = b; testResult = nil }
+                        }
+                    }
                 }
                 GroupBox(L("Cuando llegue un archivo que…")) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -155,7 +181,7 @@ struct RuleEditor: View {
                     Button(L("Probar")) { Task { testResult = await test(built) } }.disabled(built == nil)
                     Spacer()
                     Button(L("Cancelar")) { close() }
-                    Button(L("Guardar")) { if let r = built { model.save(r); close() } }
+                    Button(L("Guardar")) { if let r = built { if model.save(r) { close() } else { testResult = model.message } } }
                         .buttonStyle(.cabrioPrimary).disabled(built == nil)
                 }
             }

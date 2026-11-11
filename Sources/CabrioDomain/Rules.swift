@@ -83,9 +83,12 @@ public struct Rule: Identifiable, Sendable, Codable, Hashable {
     public var condition: RuleCondition
     public var actions: [RuleAction]
     public var isEnabled: Bool
+    /// El usuario confirmó, viendo cuántos archivos afectaría, que la regla actúe sola. Solo importa en las reglas
+    /// que lo exigen (`requiresApproval`). Las reglas guardadas antes de existir este campo quedan sin aprobar.
+    public var isApproved: Bool
 
     public init(id: UUID = UUID(), name: String, folder: URL, bookmark: Data? = nil, condition: RuleCondition,
-                actions: [RuleAction], isEnabled: Bool = true) {
+                actions: [RuleAction], isEnabled: Bool = true, isApproved: Bool = false) {
         self.id = id
         self.name = name
         self.folder = folder
@@ -93,10 +96,52 @@ public struct Rule: Identifiable, Sendable, Codable, Hashable {
         self.condition = condition
         self.actions = actions
         self.isEnabled = isEnabled
+        self.isApproved = isApproved
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        folder = try c.decode(URL.self, forKey: .folder)
+        bookmark = try c.decodeIfPresent(Data.self, forKey: .bookmark)
+        condition = try c.decode(RuleCondition.self, forKey: .condition)
+        actions = try c.decode([RuleAction].self, forKey: .actions)
+        isEnabled = try c.decode(Bool.self, forKey: .isEnabled)
+        isApproved = try c.decodeIfPresent(Bool.self, forKey: .isApproved) ?? false
     }
 
     /// Reglas que dependen solo del tiempo: los eventos de archivos nuevos no las activan, se revisan cada tanto.
     public var isAgeBased: Bool { condition.olderThanDays != nil }
+
+    /// Las que pueden hacer daño sin que el usuario mire (antigüedad o Papelera) piden confirmación explícita antes
+    /// de su primera ejecución automática.
+    public var requiresApproval: Bool {
+        isAgeBased || actions.contains { if case .moveToTrash = $0 { return true } else { return false } }
+    }
+
+    /// Puede actuar sin intervención (eventos y barridos programados).
+    public var mayRunUnattended: Bool { !requiresApproval || isApproved }
+
+    /// La aprobación vale para lo que se confirmó: si cambia lo que la regla afecta, hay que volver a confirmar.
+    public func sameScope(as other: Rule) -> Bool {
+        folder.standardizedFileURL == other.folder.standardizedFileURL && condition == other.condition && actions == other.actions
+    }
+}
+
+/// Carpetas que no se pueden vigilar: demasiado amplias o del sistema.
+public enum RuleFolderPolicy {
+    public static func isForbidden(_ url: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
+        func norm(_ u: URL) -> String { u.standardizedFileURL.resolvingSymlinksInPath().path }
+        let path = norm(url)
+        let homePath = norm(home)
+        if path == "/" || path == homePath || path == "/Users" { return true }
+        let exact: Set<String> = ["/Applications"]
+        if exact.contains(path) { return true }
+        let trees = ["/System", "/Library", "/usr", "/bin", "/sbin", "/etc", "/private/etc", "/Applications/Utilities",
+                     homePath + "/Library"]
+        return trees.contains { path == $0 || path.hasPrefix($0 + "/") }
+    }
 }
 
 /// Archivos que Cabrio no debe tocar: ocultos, descargas a medias y temporales de Office.
