@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "Cabrio";
+"NSAppleEventsUsageDescription" = "Cabrio reads the Finder selection to open it with its actions. Nothing leaves your Mac.";
+"NSHumanReadableCopyright" = "© 2026 ChocolitosSoft";
+"NSDesktopFolderUsageDescription" = "Cabrio needs access to the Desktop to apply your folder rules and process the files you choose.";
+"NSDownloadsFolderUsageDescription" = "Cabrio needs access to Downloads to apply your folder rules and process the files you choose.";
+"NSDocumentsFolderUsageDescription" = "Cabrio needs access to Documents to process the files you choose and save the results next to them.";

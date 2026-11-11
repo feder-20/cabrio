@@ -1,0 +1,28 @@
+CABRIO - Kit de marca v1 (10-nov-2026)
+
+Símbolo: un cabriolet de perfil, con la capota plegada atrás y el parabrisas inclinado.
+Representa el nombre (cabriolet = convertible) y la idea de convertir archivos.
+
+Colores
+  Negro Cabrio   #111111  (fondo de ícono, texto principal)
+  Blanco         #FFFFFF
+  Gris 600       #4A4A4A  (texto secundario)
+  Gris 200       #E6E6E6  (bordes)
+  Gris 50        #FAFAFA  (superficies)
+Tipografía: Inter (Bold para el logo, SemiBold y Regular para la interfaz).
+
+Archivos
+  cabrio-icono-app-negro              Ícono de la app (macOS, retícula 1024 con área de 824). SVG + PNG 1024/512/256/128.
+  cabrio-simbolo-negro-transparente   Símbolo negro sobre transparente. SVG + PNG.
+  cabrio-simbolo-blanco-transparente  Símbolo blanco sobre transparente, para fondos oscuros. SVG + PNG.
+  cabrio-barra-menu-template          Ícono de barra de menú tipo plantilla (negro sobre transparente; macOS lo tiñe). SVG + PNG 18 px y @2x 36 px.
+  cabrio-logo-negro-transparente      Logo horizontal (símbolo + "cabrio") negro sobre transparente.
+  cabrio-logo-blanco-transparente     Logo horizontal blanco sobre transparente.
+  cabrio-logo-sobre-negro             Logo horizontal blanco sobre fondo negro.
+
+Uso
+  - Espacio libre mínimo alrededor del logo: la altura de la letra "c".
+  - No rotar, no cambiar colores fuera de negro y blanco, no deformar la silueta ni agregar detalles al auto.
+  - En Xcode: el PNG de 1024 alimenta el AppIcon; el SVG de barra de menú va como "Template Image".
+
+Pendiente: verificar disponibilidad de la marca "Cabrio" (SIC, USPTO, EUIPO), dominio y App Store.
