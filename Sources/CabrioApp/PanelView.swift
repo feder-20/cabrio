@@ -5,6 +5,7 @@ import CabrioApplication
 struct PanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var rules = RulesModel.shared
+    @ObservedObject private var license = LicenseController.shared
     @State private var targeted = false
 
     var body: some View {
@@ -20,6 +21,7 @@ struct PanelView: View {
                     .toggleStyle(.switch).controlSize(.mini).font(.caption)
                     .help(L("Reglas de carpetas: ordenan tus carpetas solas"))
             }
+            TrialFooter(license: license)
         }
         .padding(20)
         .frame(width: 340)

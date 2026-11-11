@@ -19,6 +19,6 @@ let package = Package(
         ),
         .testTarget(name: "ApplicationTests", dependencies: ["CabrioDomain", "CabrioPorts", "CabrioApplication"]),
         .testTarget(name: "AdapterTests", dependencies: ["CabrioDomain", "CabrioPorts", "CabrioApplication", "CabrioAdapters"]),
-        .testTarget(name: "AppTests", dependencies: ["CabrioApp", "CabrioDomain"]),
+        .testTarget(name: "AppTests", dependencies: ["CabrioApp", "CabrioDomain", "CabrioApplication"]),
     ]
 )

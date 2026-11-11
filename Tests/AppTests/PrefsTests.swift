@@ -1,5 +1,8 @@
 import XCTest
 import Carbon.HIToolbox
+import CryptoKit
+import CabrioDomain
+import CabrioApplication
 @testable import CabrioApp
 
 final class PrefsTests: XCTestCase {
@@ -33,5 +36,55 @@ final class PrefsTests: XCTestCase {
         XCTAssertEqual(Prefs.suffix, "_cabrio")
         d.set(0.1, forKey: Prefs.imageQualityKey); XCTAssertEqual(Prefs.imageQuality, 0.5)
         d.set(7.0, forKey: Prefs.imageQualityKey); XCTAssertEqual(Prefs.imageQuality, 1)
+    }
+}
+
+@MainActor
+final class LicenseControllerTests: XCTestCase {
+    final class Clock: @unchecked Sendable { var now = Date(timeIntervalSince1970: 1_800_000_000) }   // enero de 2027
+
+    func make(_ clock: Clock, opened: @escaping (URL) -> Void = { _ in }) -> (LicenseController, P256.Signing.PrivateKey) {
+        let priv = P256.Signing.PrivateKey()
+        let m = LicenseManager(publicKey: priv.publicKey, store: InMemoryPreferenceStore(), now: { clock.now })
+        return (LicenseController(manager: m, openURL: opened), priv)
+    }
+
+    func testPurchaseOpensConfiguredURLWithoutNetwork() {
+        var opened: [URL] = []
+        let (c, _) = make(Clock()) { opened.append($0) }
+        c.openPurchase()
+        XCTAssertEqual(opened, [LicenseConfig.purchaseURL])
+    }
+
+    func testStateChangesAndNotifiesWhenTrialExpires() {
+        let clock = Clock()
+        let (c, _) = make(clock)
+        var seen: [TrialState] = []
+        c.onStateChange = { seen.append($0) }
+        XCTAssertFalse(c.isExpired)
+        clock.now = clock.now.addingTimeInterval(120 * 86_400)
+        c.refresh()
+        XCTAssertTrue(c.isExpired)
+        XCTAssertEqual(seen, [.expired])
+        XCTAssertEqual(c.activate("basura"), LicenseError.invalid.errorDescription)
+    }
+
+    func testFooterTexts() {
+        XCTAssertEqual(TrialText.footer(.trial(daysLeft: 30)), "Versión de prueba · quedan 30 días · Premium: 10 USD")
+        XCTAssertEqual(TrialText.footer(.lastDays(daysLeft: 1)), "Versión de prueba · último día · Premium: 10 USD")
+        XCTAssertNil(TrialText.footer(.licensed))
+    }
+
+    func testEnglishForNewStringsAndUserDefaultsStoreRoundTrip() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        Localization.bundle = try XCTUnwrap(Bundle(path: root.appendingPathComponent("Resources/en.lproj").path))
+        defer { Localization.bundle = .main }
+        XCTAssertEqual(TrialText.footer(.trial(daysLeft: 30)), "Trial version · 30 days left · Premium: 10 USD")
+        XCTAssertEqual(LicenseError.wrongApp.localizedDescription, "That key is for a different app. You need a Cabrio key.")
+        XCTAssertTrue(CabrioError.trialExpired.localizedDescription.hasPrefix("The trial period has ended."))
+        let suite = UserDefaults(suiteName: "cabrio.tests.\(UUID().uuidString)")!
+        let store = UserDefaultsPreferenceStore(defaults: suite)
+        store.set("x", forKey: "k"); XCTAssertEqual(store.string(forKey: "k"), "x")
+        store.set(nil, forKey: "k"); XCTAssertNil(store.string(forKey: "k"))
     }
 }

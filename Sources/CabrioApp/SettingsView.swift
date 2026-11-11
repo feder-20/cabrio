@@ -20,6 +20,7 @@ struct SettingsView: View {
             GeneralSettings().tabItem { Label(L("General"), systemImage: "gearshape") }
             RulesSettings(model: RulesModel.shared).tabItem { Label(L("Reglas"), systemImage: "folder.badge.gearshape") }
             QualitySettings().tabItem { Label(L("Formatos y calidad"), systemImage: "slider.horizontal.3") }
+            LicenseSettings(license: LicenseController.shared).tabItem { Label(L("Licencia"), systemImage: "checkmark.seal") }
             ShortcutSettings().tabItem { Label(L("Atajos"), systemImage: "keyboard") }
             AboutSettings().tabItem { Label(L("Acerca de"), systemImage: "info.circle") }
         }
@@ -191,7 +192,7 @@ struct AboutSettings: View {
             Text(L("Versión %@", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"))
                 .foregroundStyle(.secondary)
             Text(L("Todo se procesa en tu Mac. Nada se sube a internet."))
-            Text(L("Versión de desarrollo, sin límites. La licencia llegará más adelante."))
+            Text(L("Versión de prueba (tester): gratis durante el periodo de prueba."))
                 .font(.caption).foregroundStyle(.secondary)
             Text("© 2026 ChocolitosSoft").font(.caption).foregroundStyle(.secondary)
         }

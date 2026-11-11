@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
+    private let license = LicenseController.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -45,8 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             drop.onClick = { [weak self] in self?.toggle() }
             drop.onRightClick = { [weak self] in self?.showMenu() }
             drop.onDrop = { [weak self] urls in
-                self?.model.add(urls)
-                self?.show()
+                guard let self, !self.license.isExpired else { WindowPresenter.shared.showExpired(); return }
+                self.model.add(urls)
+                self.show()
             }
             button.addSubview(drop)
         }
@@ -60,9 +62,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Atajo global: abre Cabrio con la selección actual del Finder.
         HotKeyCenter.shared.onPress = { [weak self] in self?.openWithFinderSelection() }
         HotKeyCenter.shared.applyPreferences()
-        WindowPresenter.shared.onWelcomeFinished = { [weak self] in self?.show() }
+        WindowPresenter.shared.onWelcomeFinished = { [weak self] in
+            self?.presentLicenseNotices()
+            self?.show()
+        }
         RulesModel.shared.start()
-        if !Prefs.onboardingDone { WindowPresenter.shared.showWelcome() }
+        license.onStateChange = { state in if state == .expired { WindowPresenter.shared.showExpired() } }
+        license.startRefreshing()
+        if !Prefs.onboardingDone { WindowPresenter.shared.showWelcome() } else { presentLicenseNotices() }
+    }
+
+    /// Periodo terminado, aviso de primer arranque (una vez) o recordatorio diario de los últimos días.
+    private func presentLicenseNotices() {
+        license.refresh()
+        let state = license.state
+        if state == .expired { WindowPresenter.shared.showExpired(); return }
+        if state == .licensed { return }
+        if !license.manager.noticeSeen {
+            license.manager.markNoticeSeen()
+            _ = license.manager.takeDailyReminder()   // el aviso inicial ya cuenta como el de hoy
+            WindowPresenter.shared.showNotice(state: state)
+        } else if license.manager.takeDailyReminder() {
+            WindowPresenter.shared.showNotice(state: state)
+        }
     }
 
     /// Archivos entregados por el Finder (Acción rápida, «Abrir con», arrastrar al Dock) o por `open -a`.
@@ -89,6 +111,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showMenu() {
         let menu = NSMenu()
+        license.refresh()
+        if let info = TrialText.footer(license.state) {
+            let item = menu.addItem(withTitle: info, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(withTitle: L("Obtener premium…"), action: #selector(openPurchase), keyEquivalent: "").target = self
+            menu.addItem(withTitle: L("Introducir clave…"), action: #selector(openActivation), keyEquivalent: "").target = self
+            menu.addItem(.separator())
+        } else {
+            menu.addItem(withTitle: L("Premium activado · %@", license.holder ?? ""), action: nil, keyEquivalent: "").isEnabled = false
+            menu.addItem(.separator())
+        }
         menu.addItem(withTitle: L("Ajustes…"), action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(withTitle: L("Bienvenida"), action: #selector(openWelcome), keyEquivalent: "").target = self
         menu.addItem(.separator())
@@ -97,6 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
     }
 
+    @objc private func openPurchase() { license.openPurchase() }
+    @objc private func openActivation() { WindowPresenter.shared.showActivation() }
     @objc private func openSettings() { WindowPresenter.shared.showSettings() }
     @objc private func openWelcome() { WindowPresenter.shared.showWelcome() }
 
@@ -118,6 +153,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func show() {
+        license.refresh()
+        if license.isExpired { WindowPresenter.shared.showExpired(); return }
         guard let button = statusItem.button, !popover.isShown else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)

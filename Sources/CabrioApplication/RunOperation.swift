@@ -12,9 +12,12 @@ public final class RunOperation: Sendable {
     private let fs: FileSystem
     private let history: HistoryStore
     private let suffixProvider: @Sendable () -> String
+    private let gate: ExecutionGate
 
     public init(pdf: PDFEngine, image: ImageEngine, archive: ArchiveEngine,
-                media: MediaEngine, ocr: OCREngine, fileSystem: FileSystem, history: HistoryStore, suffix: @escaping @Sendable () -> String = { "_cabrio" }) {
+                media: MediaEngine, ocr: OCREngine, fileSystem: FileSystem, history: HistoryStore, suffix: @escaping @Sendable () -> String = { "_cabrio" },
+                gate: ExecutionGate = OpenGate()) {
+        self.gate = gate
         self.pdf = pdf
         self.image = image
         self.archive = archive
@@ -28,6 +31,7 @@ public final class RunOperation: Sendable {
     @discardableResult
     public func callAsFunction(_ op: CabrioOperation, inputs: [URL],
                                progress: (@Sendable (Double) -> Void)? = nil) async throws -> [URL] {
+        try gate.check()   // prueba terminada: no se hace nada ni se toca el disco
         guard let first = inputs.first else { throw CabrioError.notEnoughFiles }
         let dir = first.deletingLastPathComponent()
         let suffix = suffixProvider()   // se lee una vez por operación: un cambio en Ajustes no parte un lote

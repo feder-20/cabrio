@@ -159,6 +159,7 @@ public enum CabrioError: Error, LocalizedError, Sendable, Equatable {
     case tooLarge(String)
     case writeFailed(String)
     case cancelled
+    case trialExpired
 
     public var errorDescription: String? {
         switch self {
@@ -170,6 +171,7 @@ public enum CabrioError: Error, LocalizedError, Sendable, Equatable {
         case .tooLarge(let n): return tr("«%@» es demasiado grande para este formato (4 GB como máximo).", n)
         case .writeFailed(let m): return tr("No se pudo guardar el resultado. %@", m)
         case .cancelled: return tr("Operación cancelada.")
+        case .trialExpired: return tr("El periodo de prueba terminó. Activa Cabrio Premium para seguir usándola; tus archivos no se han tocado.")
         }
     }
 }

@@ -18,6 +18,7 @@ public actor RuleRunner {
     private let image: ImageEngine
     private let history: HistoryStore
     private let watcher: FolderWatcher
+    private let gate: ExecutionGate
     private let now: @Sendable () -> Date
     private let stability: Duration
     private let sweepInterval: Duration
@@ -44,7 +45,9 @@ public actor RuleRunner {
     public init(store: RuleStore, fileSystem: FileSystem, detector: FileKindDetecting, image: ImageEngine,
                 history: HistoryStore, watcher: FolderWatcher, now: @escaping @Sendable () -> Date = { Date() },
                 stability: Duration = .seconds(2), sweepInterval: Duration = .seconds(1800),
-                ownOutputTTL: TimeInterval = 120, cycleLimit: Int = 3, cycleWindow: TimeInterval = 60) {
+                ownOutputTTL: TimeInterval = 120, cycleLimit: Int = 3, cycleWindow: TimeInterval = 60,
+                gate: ExecutionGate = OpenGate()) {
+        self.gate = gate
         self.ownOutputTTL = ownOutputTTL
         self.cycleLimit = cycleLimit
         self.cycleWindow = cycleWindow
@@ -209,6 +212,8 @@ public actor RuleRunner {
 
     /// Ejecuta las acciones de la regla en orden y anota lo hecho para poder deshacerlo.
     func apply(_ rule: Rule, to original: URL) async -> HistoryEntry? {
+        // Prueba terminada: los vigilantes siguen puestos pero no actúan; reglas, historial y archivos quedan intactos.
+        guard (try? gate.check()) != nil else { return nil }
         var current = original
         var moves: [FileMove] = []
         var outputs: [URL] = []

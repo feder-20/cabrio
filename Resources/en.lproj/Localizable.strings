@@ -219,7 +219,7 @@
 "Usa {name}, {n}, {n:3}, {date}, {created} o {parent}." = "Use {name}, {n}, {n:3}, {date}, {created} or {parent}.";
 "Ver la bienvenida" = "Show the welcome";
 "Versión %@" = "Version %@";
-"Versión de desarrollo, sin límites. La licencia llegará más adelante." = "Development version, with no limits. Licensing will come later.";
+"Versión de prueba (tester): gratis durante el periodo de prueba." = "Trial version (tester): free during the trial period.";
 "Video" = "Video";
 "Vigilar" = "Watch";
 "Ya existe «%@»." = "“%@” already exists.";
@@ -261,3 +261,36 @@
 "Ahora mismo no hay archivos que coincidan. Cuando lleguen, la regla actuará sola y podrás deshacerlo." = "No files match right now. When some arrive, the rule will act on its own and you will be able to undo it.";
 "Ahora mismo afectaría a %d archivos, por ejemplo: %@. A partir de aquí actuará sola; podrás deshacerlo." = "Right now it would affect %d files, for example: %@. From here on it will act on its own; you will be able to undo it.";
 "«%@» se dejó de procesar: las reglas lo han movido o convertido demasiadas veces seguidas (posible ciclo entre reglas). Revisa «%@»." = "“%@” was no longer processed: rules have moved or converted it too many times in a row (possible loop between rules). Check “%@”.";
+
+/* Periodo de prueba y licencia */
+"La clave no es válida. Revisa que la hayas copiado completa." = "The key is not valid. Check that you copied all of it.";
+"Esa clave es de otra app. Necesitas una clave de Cabrio." = "That key is for a different app. You need a Cabrio key.";
+"Esta clave ya está activada." = "This key is already activated.";
+"El periodo de prueba terminó. Activa Cabrio Premium para seguir usándola; tus archivos no se han tocado." = "The trial period has ended. Activate Cabrio Premium to keep using it; your files have not been touched.";
+"Versión de prueba · quedan %d días · Premium: %@" = "Trial version · %d days left · Premium: %@";
+"Versión de prueba · último día · Premium: %@" = "Trial version · last day · Premium: %@";
+"Quedan %d días de prueba · Premium: %@" = "%d trial days left · Premium: %@";
+"El periodo de prueba terminó" = "The trial period has ended";
+"Hoy es el último día de la prueba." = "Today is the last day of the trial.";
+"Quedan %d días de prueba." = "%d trial days left.";
+"Obtener premium" = "Get premium";
+"Obtener premium…" = "Get premium…";
+"Introducir clave…" = "Enter key…";
+"Premium activado · %@" = "Premium activated · %@";
+"Estás usando una versión de prueba (tester)" = "You are using a trial (tester) version";
+"Cabrio está en periodo de prueba hasta el 9 de febrero de 2027. Es gratis durante este periodo y nos ayudas a mejorarla. Después, cada app costará %@ (pago único). Tus archivos nunca se tocan ni se pierden." = "Cabrio is in its trial period until February 9, 2027. It is free during this period and you help us improve it. After that, each app will cost %@ (one-time payment). Your files are never touched or lost.";
+"Más información / Obtener premium" = "More information / Get premium";
+"Entendido" = "Got it";
+"Introducir clave de licencia" = "Enter license key";
+"Gracias por probar Cabrio. Para seguir usándola, obtén la versión premium (%@, pago único)." = "Thanks for trying Cabrio. To keep using it, get the premium version (%@, one-time payment).";
+"Tus archivos y tus reglas se conservan intactos." = "Your files and your rules are kept intact.";
+"Tengo una clave" = "I have a key";
+"Pega aquí tu clave" = "Paste your key here";
+"Activar" = "Activate";
+"Salir" = "Quit";
+"Licencia" = "License";
+"Estado" = "Status";
+"Quitar licencia" = "Remove license";
+"La prueba termina el 9 de febrero de 2027. Cabrio es gratis durante el periodo de prueba; después, cada app costará %@ (pago único)." = "The trial ends on February 9, 2027. Cabrio is free during the trial period; after that, each app will cost %@ (one-time payment).";
+"Versión de prueba" = "Trial version";
+"Licencia de Cabrio" = "Cabrio license";

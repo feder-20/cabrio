@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.10.0 — Periodo de prueba (tester) y licencia premium
+- **Cabrio pasa a periodo de prueba hasta el 9 de febrero de 2027.** Es gratis durante ese periodo; después, cada app costará 10 USD (pago único). Al abrirla por primera vez se explica con una ventana clara; en el panel hay una línea discreta («Versión de prueba · quedan N días · Premium: 10 USD») y en el menú del ícono, «Obtener premium…» e «Introducir clave…». En los últimos 14 días se muestra un recordatorio una vez al día.
+- **Activación con clave, sin internet.** La clave se verifica en tu Mac (firma ECDSA P-256); nada se envía. Ajustes tiene una pestaña «Licencia» con el estado, «Obtener premium», «Introducir clave…» y «Quitar licencia». Una licencia nunca caduca.
+- **Al terminar la prueba** aparece una ventana que pide la clave y ninguna acción se ejecuta (comprimir, dividir, OCR, proteger, convertir, renombrar, zip), ni las reglas automáticas; las reglas, el historial y tus archivos se conservan intactos y no se borra nada. Retrasar el reloj del Mac no reactiva la prueba.
+- Sin llamadas de red: solo se abre la página de compra en tu navegador. Se corrigió el texto de Acerca de, que decía «sin límites» y «la licencia llegará más adelante».
+
 ## 0.9.2 — Seguridad
 - **Las reglas de carpetas ya no se disparan a sí mismas.** «Convertir a JPG» sobre una carpeta vigilada ya no crea `a-2.jpg`, `a-2-2.jpg`… sin fin: ignora lo que Cabrio mismo genera, no convierte un archivo que ya tiene el formato destino y deja de procesar un archivo tras 3 pasadas en 60 s, avisando en la regla. Lo mismo ocurre con reglas que se mueven archivos entre sí.
 - **Las reglas por antigüedad ya no actúan sobre archivos recién llegados.** Antes, un `.dmg` antiguo copiado a Descargas podía ir a la Papelera a los 2 segundos. Ahora solo actúan en el barrido programado o con «Ejecutar ahora».
