@@ -80,6 +80,9 @@
 "Este Mac no puede crear archivos %@." = "This Mac cannot create %@ files.";
 "Este Mac no puede crear audio M4A." = "This Mac cannot create M4A audio.";
 "Este PDF no se pudo reescribir para comprimirlo." = "This PDF could not be rewritten to compress it.";
+"Este PDF es demasiado grande para procesarlo (1 GB como máximo)." = "This PDF is too large to process (1 GB maximum).";
+"Este PDF está dañado o tiene una estructura no válida." = "This PDF is damaged or has an invalid structure.";
+"No se pudo generar el cifrado de forma segura. Inténtalo de nuevo." = "Secure encryption could not be set up. Try again.";
 "Este PDF usa una estructura que Cabrio todavía no sabe procesar." = "This PDF uses a structure Cabrio cannot process yet.";
 "Este archivo ya estaba optimizado." = "This file was already optimized.";
 "Extensiones: dmg, pkg" = "Extensions: dmg, pkg";

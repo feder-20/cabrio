@@ -210,7 +210,14 @@ public final class RunOperation: Sendable {
             throw CabrioError.writeFailed(error.localizedDescription)
         }
 
-        await history.record(HistoryEntry(operation: op, inputs: inputs, outputs: outputs, reports: reports, moves: renames))
+        // La contraseña nunca llega al historial: ni en memoria ni persistida.
+        var recorded = op
+        switch op {
+        case .protectPDF: recorded = .protectPDF(password: SecretRef(""))
+        case .unlockPDF: recorded = .unlockPDF(password: SecretRef(""))
+        default: break
+        }
+        await history.record(HistoryEntry(operation: recorded, inputs: inputs, outputs: outputs, reports: reports, moves: renames))
         return outputs
     }
 

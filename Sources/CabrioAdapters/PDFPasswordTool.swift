@@ -21,6 +21,7 @@ enum PDFPasswordTool {
     }
 
     static func rc4(key: [UInt8], _ data: [UInt8]) -> [UInt8] {
+        guard !key.isEmpty else { return data }
         var s = [UInt8](0...255)
         var j = 0
         for i in 0..<256 {
@@ -49,9 +50,10 @@ enum PDFPasswordTool {
         return Array(out[0..<moved])
     }
 
-    static func random(_ n: Int) -> [UInt8] {
+    /// Bytes aleatorios criptográficos; nil si el sistema no pudo generarlos (nunca se devuelven ceros).
+    static func random(_ n: Int) -> [UInt8]? {
         var b = [UInt8](repeating: 0, count: n)
-        _ = SecRandomCopyBytes(kSecRandomDefault, n, &b)
+        guard SecRandomCopyBytes(kSecRandomDefault, n, &b) == errSecSuccess else { return nil }
         return b
     }
 
@@ -70,13 +72,14 @@ enum PDFPasswordTool {
             return Array(md5(d).prefix(min(key.count + 5, 16)))
         }
 
-        func encrypt(_ data: [UInt8], _ number: Int, _ gen: Int) -> [UInt8] {
+        /// nil si falla el generador aleatorio o AES: el llamador aborta en vez de escribir un PDF corrupto.
+        func encrypt(_ data: [UInt8], _ number: Int, _ gen: Int) -> [UInt8]? {
             switch method {
             case .none: return data
             case .rc4: return rc4(key: objectKey(number, gen), data)
             case .aes128:
-                let iv = random(16)
-                return iv + (aes(encrypt: true, key: objectKey(number, gen), iv: iv, data) ?? [])
+                guard let iv = random(16), let body = aes(encrypt: true, key: objectKey(number, gen), iv: iv, data) else { return nil }
+                return iv + body
             }
         }
 
@@ -243,7 +246,9 @@ enum PDFPasswordTool {
             throw CabrioError.unsupported(tr("«%@» ya tiene contraseña. Quítala primero si quieres poner otra.", name))
         }
         let pw = passwordBytes(password)
-        let id0 = random(16), id1 = random(16)
+        guard let id0 = random(16), let id1 = random(16) else {
+            throw CabrioError.unsupported(tr("No se pudo generar el cifrado de forma segura. Inténtalo de nuevo."))
+        }
         let permissions: Int32 = -4
         let o = ownerEntry(owner: pw, user: pw, r: 4, keyLength: 16)
         let key = fileKey(password: pw, o: o, p: permissions, id0: id0, r: 4, keyLength: 16, encryptMetadata: true)
@@ -330,6 +335,9 @@ enum PDFPasswordTool {
     }
 
     private static func readOriginal(_ url: URL) throws -> Data {
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > PDFLimits.maxFileBytes {
+            throw CabrioError.unsupported(tr("Este PDF es demasiado grande para procesarlo (1 GB como máximo)."))
+        }
         do { return try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw CabrioError.unreadableFile(url.lastPathComponent) }
     }
