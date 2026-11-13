@@ -16,7 +16,7 @@ final class Services {
 
     private init() {
         // Sin clave pública legible ninguna licencia se acepta (nunca queda abierto).
-        license = LicenseManager(publicKey: LicenseConfig.publicKey(), store: UserDefaultsPreferenceStore())
+        license = LicenseManager(publicKey: LicenseConfig.publicKey(), store: UserDefaultsPreferenceStore(), backup: FilePreferenceStore.default)
         let image = ImageIOEngine()
         let fs = LocalFileSystem()
         operations = RunOperation(pdf: PDFKitEngine(), image: image, archive: ZipArchiveEngine(), media: AVFoundationEngine(),

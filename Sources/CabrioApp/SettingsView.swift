@@ -192,7 +192,7 @@ struct AboutSettings: View {
             Text(L("Versión %@", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"))
                 .foregroundStyle(.secondary)
             Text(L("Todo se procesa en tu Mac. Nada se sube a internet."))
-            Text(L("Versión de prueba (tester): gratis durante el periodo de prueba."))
+            Text(L("Versión de prueba (tester): gratis durante %d días desde la primera vez que la abres.", LicenseConfig.trialDays))
                 .font(.caption).foregroundStyle(.secondary)
             Text("© 2026 ChocolitosSoft").font(.caption).foregroundStyle(.secondary)
         }

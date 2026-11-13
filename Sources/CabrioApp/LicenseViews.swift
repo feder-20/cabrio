@@ -23,6 +23,7 @@ struct TrialFooter: View {
 /// Aviso de primer arranque y recordatorio diario de los últimos días.
 struct TrialNoticeView: View {
     let state: TrialState
+    var trialEnd: Date?
     var onOK: () -> Void
     var onMore: () -> Void
 
@@ -32,7 +33,7 @@ struct TrialNoticeView: View {
             if case .lastDays = state, let n = TrialText.notice(state) {
                 Label(n, systemImage: "clock.badge.exclamationmark").foregroundStyle(.orange).font(.subheadline.weight(.medium))
             }
-            Text(L("Cabrio está en periodo de prueba hasta el 9 de febrero de 2027. Es gratis durante este periodo y nos ayudas a mejorarla. Después, cada app costará %@ (pago único). Tus archivos nunca se tocan ni se pierden.", LicenseConfig.priceText))
+            Text(L("Cabrio está en periodo de prueba: úsala gratis durante %d días (hasta el %@) y ayúdanos a mejorarla. Después, cada app costará %@ (pago único). Tus archivos nunca se tocan ni se pierden.", LicenseConfig.trialDays, TrialText.date(trialEnd), LicenseConfig.priceText))
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(L("Más información / Obtener premium")) { onMore() }
@@ -58,6 +59,8 @@ struct ActivationView: View {
             if expired {
                 Text(L("Gracias por probar Cabrio. Para seguir usándola, obtén la versión premium (%@, pago único).", LicenseConfig.priceText))
                     .fixedSize(horizontal: false, vertical: true)
+                Text(L("Tu prueba de %d días terminó el %@.", LicenseConfig.trialDays, TrialText.date(license.trialEnd)))
+                    .font(.caption).foregroundStyle(.secondary)
                 Text(L("Tus archivos y tus reglas se conservan intactos."))
                     .font(.caption).foregroundStyle(.secondary)
                 Button(L("Obtener premium")) { license.openPurchase() }.buttonStyle(.cabrioPrimary)
@@ -102,7 +105,7 @@ struct LicenseSettings: View {
                     Text(TrialText.footer(license.state) ?? "")
                 }
                 if license.state != .licensed {
-                    Text(L("La prueba termina el 9 de febrero de 2027. Cabrio es gratis durante el periodo de prueba; después, cada app costará %@ (pago único).", LicenseConfig.priceText))
+                    Text(L("Tu prueba gratuita de %d días, contados desde la primera vez que abriste Cabrio, termina el %@. Después, cada app costará %@ (pago único).", LicenseConfig.trialDays, TrialText.date(license.trialEnd), LicenseConfig.priceText))
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button(L("Obtener premium")) { license.openPurchase() }.buttonStyle(.cabrioPrimary)

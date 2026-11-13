@@ -1,5 +1,11 @@
 # Cambios
 
+## 0.10.1 — Prueba de 90 días por persona
+- **La prueba ahora dura 90 días para cada persona, contados desde la primera vez que abre Cabrio** (ya no hay una fecha límite para todos). El aviso de bienvenida, la línea del panel («Versión de prueba · quedan N días de 90 · Premium: 10 USD»), los recordatorios, Ajustes > Licencia y la ventana de «periodo terminado» muestran la fecha de fin calculada para ti.
+- **Si ya usabas la 0.10.0**, recibes 90 días completos desde el momento en que actualizas; no se repite la bienvenida.
+- El inicio de la prueba se guarda en dos lugares (preferencias y un archivo pequeño en Application Support); se usa el más antiguo y se recrea el que falte. Es un freno razonable, no una protección infalible. Retrasar el reloj tampoco revive la prueba.
+- Sin cambios en la licencia (clave ECDSA, verificada sin internet), en el bloqueo de funciones y reglas al terminar la prueba, ni en que tus archivos nunca se tocan.
+
 ## 0.10.0 — Periodo de prueba (tester) y licencia premium
 - **Cabrio pasa a periodo de prueba hasta el 9 de febrero de 2027.** Es gratis durante ese periodo; después, cada app costará 10 USD (pago único). Al abrirla por primera vez se explica con una ventana clara; en el panel hay una línea discreta («Versión de prueba · quedan N días · Premium: 10 USD») y en el menú del ícono, «Obtener premium…» e «Introducir clave…». En los últimos 14 días se muestra un recordatorio una vez al día.
 - **Activación con clave, sin internet.** La clave se verifica en tu Mac (firma ECDSA P-256); nada se envía. Ajustes tiene una pestaña «Licencia» con el estado, «Obtener premium», «Introducir clave…» y «Quitar licencia». Una licencia nunca caduca.

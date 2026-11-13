@@ -17,8 +17,14 @@ final class LicenseTests: XCTestCase {
         c.timeZone = TimeZone(identifier: tz)!
         return c.date(from: DateComponents(year: y, month: m, day: d, hour: h, minute: min, second: s))!
     }
-    func state(_ now: Date, lastSeen: Date? = nil, licensed: Bool = false, calendar: Calendar? = nil) -> TrialState {
-        TrialPolicy.state(now: now, lastSeen: lastSeen, licensed: licensed, calendar: calendar ?? cal)
+    /// Primer arranque de referencia: 11 de noviembre de 2026 (D0). Último día de uso: 8 de febrero de 2027 (D0+89).
+    var first: Date { date(2026, 11, 11, 15) }
+    func state(_ now: Date, first f: Date? = nil, lastSeen: Date? = nil, licensed: Bool = false, calendar: Calendar? = nil) -> TrialState {
+        TrialPolicy.state(now: now, firstLaunch: f ?? first, lastSeen: lastSeen, licensed: licensed, calendar: calendar ?? cal)
+    }
+    /// Almacén con `firstLaunch` ya guardado (como si la app se hubiera abierto antes).
+    func seeded(_ f: Date? = nil) -> InMemoryPreferenceStore {
+        let s = InMemoryPreferenceStore(); s.set(String((f ?? first).timeIntervalSince1970), forKey: "trial.firstLaunch"); return s
     }
 
     let priv = P256.Signing.PrivateKey()
@@ -37,25 +43,37 @@ final class LicenseTests: XCTestCase {
     // MARK: TrialPolicy
 
     func testStatesAndBoundaries() {
-        XCTAssertEqual(state(date(2026, 11, 11)), .trial(daysLeft: 91))
-        XCTAssertEqual(state(date(2027, 1, 26)), .trial(daysLeft: 15))
-        XCTAssertEqual(state(date(2027, 1, 27, 0, 0, 0)), .lastDays(daysLeft: 14))
-        XCTAssertEqual(state(date(2027, 2, 8)), .lastDays(daysLeft: 2))
-        XCTAssertEqual(state(date(2027, 2, 9, 0, 0, 0)), .lastDays(daysLeft: 1))
-        XCTAssertEqual(state(date(2027, 2, 9, 23, 59, 59)), .lastDays(daysLeft: 1))
-        XCTAssertEqual(state(date(2027, 2, 10, 0, 0, 0)), .expired)
+        XCTAssertEqual(state(date(2026, 11, 11, 15)), .trial(daysLeft: 90), "día 1")
+        XCTAssertEqual(state(date(2026, 11, 11, 0, 0, 0)), .trial(daysLeft: 90))
+        XCTAssertEqual(state(date(2027, 1, 25)), .trial(daysLeft: 15))
+        XCTAssertEqual(state(date(2027, 1, 26, 0, 0, 0)), .lastDays(daysLeft: 14))
+        XCTAssertEqual(state(date(2027, 2, 7)), .lastDays(daysLeft: 2))
+        XCTAssertEqual(state(date(2027, 2, 8, 0, 0, 0)), .lastDays(daysLeft: 1), "día 90 = último día")
+        XCTAssertEqual(state(date(2027, 2, 8, 23, 59, 59)), .lastDays(daysLeft: 1))
+        XCTAssertEqual(state(date(2027, 2, 9, 0, 0, 0)), .expired, "día 91")
         XCTAssertEqual(state(date(2028, 1, 1)), .expired)
     }
 
     func testMidnightBoundary() {
-        XCTAssertEqual(state(date(2027, 1, 26, 23, 59, 59)), .trial(daysLeft: 15))
-        XCTAssertEqual(state(date(2027, 1, 27, 0, 0, 1)), .lastDays(daysLeft: 14))
+        XCTAssertEqual(state(date(2027, 1, 25, 23, 59, 59)), .trial(daysLeft: 15))
+        XCTAssertEqual(state(date(2027, 1, 26, 0, 0, 1)), .lastDays(daysLeft: 14))
+    }
+
+    func testEndDateIsLastDayOfUse() {
+        XCTAssertEqual(TrialPolicy.endDate(firstLaunch: first, calendar: cal), date(2027, 2, 8, 0, 0, 0))
+        XCTAssertEqual(TrialPolicy.trialEndDay(firstLaunch: first, calendar: cal), date(2027, 2, 9, 0, 0, 0))
+        XCTAssertEqual(LicenseConfig.trialDays, 90)
     }
 
     func testClockGoingBackDoesNotReviveTrial() {
-        let late = date(2027, 3, 1)
-        XCTAssertEqual(state(date(2026, 11, 11), lastSeen: late), .expired)
-        XCTAssertEqual(state(date(2027, 2, 1), lastSeen: date(2027, 2, 8)), .lastDays(daysLeft: 2))
+        XCTAssertEqual(state(date(2026, 11, 12), lastSeen: date(2027, 3, 1)), .expired)
+        XCTAssertEqual(state(date(2027, 2, 1), lastSeen: date(2027, 2, 6)), .lastDays(daysLeft: 3))
+    }
+
+    func testFirstLaunchInTheFutureIsClamped() {
+        // Guardado «dentro de un año» (manipulado): no da más de 90 días ni rompe el estado.
+        XCTAssertEqual(state(date(2026, 12, 1), first: date(2027, 12, 1)), .trial(daysLeft: 90))
+        XCTAssertEqual(state(date(2027, 3, 1), first: date(2030, 1, 1), lastSeen: date(2027, 3, 1)), .trial(daysLeft: 90))
     }
 
     func testLicensedBeatsExpired() {
@@ -66,12 +84,19 @@ final class LicenseTests: XCTestCase {
     func testTimeZoneAndDSTDoNotShiftDaysByOne() {
         for tz in ["America/New_York", "Europe/Madrid", "Asia/Tokyo", "Pacific/Auckland", "America/Bogota"] {
             var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: tz)!
-            XCTAssertEqual(state(date(2027, 2, 9, 23, 59, 59, tz: tz), calendar: c), .lastDays(daysLeft: 1), tz)
-            XCTAssertEqual(state(date(2027, 2, 10, 0, 0, 0, tz: tz), calendar: c), .expired, tz)
-            XCTAssertEqual(state(date(2027, 1, 27, 0, 0, 0, tz: tz), calendar: c), .lastDays(daysLeft: 14), tz)
-            XCTAssertEqual(state(date(2027, 1, 26, 23, 0, 0, tz: tz), calendar: c), .trial(daysLeft: 15), tz)
-            // Cruces de horario de verano: 14 de marzo de 2026 (EE. UU.) y 29 de marzo (Europa).
-            XCTAssertEqual(state(date(2026, 3, 8, 3, 0, 0, tz: tz), calendar: c), .trial(daysLeft: 339), tz)
+            let f = date(2026, 11, 11, 15, tz: tz)
+            XCTAssertEqual(state(date(2027, 2, 8, 23, 59, 59, tz: tz), first: f, calendar: c), .lastDays(daysLeft: 1), tz)
+            XCTAssertEqual(state(date(2027, 2, 9, 0, 0, 0, tz: tz), first: f, calendar: c), .expired, tz)
+            XCTAssertEqual(state(date(2027, 1, 26, 0, 0, 0, tz: tz), first: f, calendar: c), .lastDays(daysLeft: 14), tz)
+            XCTAssertEqual(state(date(2027, 1, 25, 23, 0, 0, tz: tz), first: f, calendar: c), .trial(daysLeft: 15), tz)
+            // Pruebas que cruzan el cambio de horario (marzo y octubre/noviembre): siguen siendo 90 días de calendario.
+            let g = date(2026, 3, 1, 23, 30, tz: tz)
+            XCTAssertEqual(state(g, first: g, calendar: c), .trial(daysLeft: 90), tz)
+            XCTAssertEqual(state(date(2026, 5, 29, 23, 59, 59, tz: tz), first: g, calendar: c), .lastDays(daysLeft: 1), tz)
+            XCTAssertEqual(state(date(2026, 5, 30, 0, 0, 0, tz: tz), first: g, calendar: c), .expired, tz)
+            let h = date(2026, 10, 1, 1, 0, tz: tz)
+            XCTAssertEqual(state(date(2026, 12, 29, 23, 59, tz: tz), first: h, calendar: c), .lastDays(daysLeft: 1), tz)
+            XCTAssertEqual(state(date(2026, 12, 30, 0, 0, tz: tz), first: h, calendar: c), .expired, tz)
         }
     }
 
@@ -134,12 +159,12 @@ final class LicenseTests: XCTestCase {
 
     final class Clock: @unchecked Sendable { var now: Date; init(_ d: Date) { now = d } }
 
-    func manager(_ clock: Clock, store: PreferenceStore = InMemoryPreferenceStore()) -> LicenseManager {
-        LicenseManager(publicKey: priv.publicKey, store: store, now: { clock.now }, calendar: cal)
+    func manager(_ clock: Clock, store: PreferenceStore? = nil, backup: PreferenceStore = InMemoryPreferenceStore()) -> LicenseManager {
+        LicenseManager(publicKey: priv.publicKey, store: store ?? seeded(), backup: backup, now: { clock.now }, calendar: cal)
     }
 
     func testManagerActivationPersistenceAndRemoval() throws {
-        let clock = Clock(date(2027, 3, 1)), store = InMemoryPreferenceStore()
+        let clock = Clock(date(2027, 3, 1)), store = seeded()
         let m = manager(clock, store: store)
         XCTAssertEqual(m.state(), .expired)
         XCTAssertThrowsError(try m.check()) { XCTAssertEqual($0 as? CabrioError, .trialExpired) }
@@ -154,31 +179,93 @@ final class LicenseTests: XCTestCase {
         XCTAssertEqual(manager(clock, store: store).state(), .licensed)
         XCTAssertEqual(manager(clock, store: store).license?.name, "Ana")
         // Una clave alterada en las preferencias no cuenta.
-        let tampered = InMemoryPreferenceStore(); tampered.set(makeKey(signer: P256.Signing.PrivateKey()), forKey: "license.key")
+        let tampered = seeded(); tampered.set(makeKey(signer: P256.Signing.PrivateKey()), forKey: "license.key")
         XCTAssertEqual(manager(clock, store: tampered).state(), .expired)
         m.removeLicense()
         XCTAssertEqual(m.state(), .expired)
     }
 
     func testManagerLastSeenBlocksClockRollback() {
-        let clock = Clock(date(2027, 2, 5)), store = InMemoryPreferenceStore()
-        XCTAssertEqual(manager(clock, store: store).state(), .lastDays(daysLeft: 5))
+        let clock = Clock(date(2027, 2, 5)), store = seeded()
+        XCTAssertEqual(manager(clock, store: store).state(), .lastDays(daysLeft: 4))
         clock.now = date(2027, 2, 12); XCTAssertEqual(manager(clock, store: store).state(), .expired)
         clock.now = date(2026, 11, 1); XCTAssertEqual(manager(clock, store: store).state(), .expired, "atrasar el reloj no revive la prueba")
     }
 
+    func ts(_ s: PreferenceStore) -> Double? { s.string(forKey: "trial.firstLaunch").flatMap(Double.init) }
+
+    func testFirstRunStartsNinetyDaysAndWritesBothRecords() {
+        let clock = Clock(date(2026, 11, 11, 15)), store = InMemoryPreferenceStore(), backup = InMemoryPreferenceStore()
+        let m = manager(clock, store: store, backup: backup)
+        XCTAssertEqual(m.state(), .trial(daysLeft: 90))
+        XCTAssertEqual(ts(store), clock.now.timeIntervalSince1970)
+        XCTAssertEqual(ts(backup), clock.now.timeIntervalSince1970)
+        XCTAssertEqual(m.trialEndDate(), date(2027, 2, 8, 0, 0, 0))
+        clock.now = date(2027, 2, 8, 22); XCTAssertEqual(m.state(), .lastDays(daysLeft: 1))
+        clock.now = date(2027, 2, 9, 0, 0, 1); XCTAssertEqual(m.state(), .expired)
+        XCTAssertThrowsError(try m.check())
+    }
+
+    func testFirstLaunchRedundancyUsesOldestAndRecreatesMissing() {
+        let old = date(2026, 9, 1, 10), recent = date(2026, 11, 1, 10)
+        // Borran las preferencias: el archivo conserva la fecha y se recrea.
+        let backup = seeded(old), clock = Clock(date(2026, 11, 20))
+        let store = InMemoryPreferenceStore()
+        XCTAssertEqual(manager(clock, store: store, backup: backup).state(), .lastDays(daysLeft: 10))
+        XCTAssertEqual(ts(store), old.timeIntervalSince1970)
+        // Borran el archivo: las preferencias lo recrean.
+        let backup2 = InMemoryPreferenceStore(), store2 = seeded(old)
+        _ = manager(clock, store: store2, backup: backup2).state()
+        XCTAssertEqual(ts(backup2), old.timeIntervalSince1970)
+        // Si difieren, gana el más antiguo y se unifican.
+        let s3 = seeded(recent), b3 = seeded(old)
+        _ = manager(clock, store: s3, backup: b3).state()
+        XCTAssertEqual(ts(s3), old.timeIntervalSince1970); XCTAssertEqual(ts(b3), old.timeIntervalSince1970)
+        let s4 = seeded(old), b4 = seeded(recent)
+        _ = manager(clock, store: s4, backup: b4).state()
+        XCTAssertEqual(ts(b4), old.timeIntervalSince1970)
+        // Con ambos del pasado lejano la prueba ya venció aunque se borre una copia.
+        XCTAssertEqual(manager(Clock(date(2027, 3, 1)), store: InMemoryPreferenceStore(), backup: seeded(old)).state(), .expired)
+    }
+
+    func testMigrationFromFixedDateVersionGivesFullNinetyDays() {
+        // 0.10.0: sin firstLaunch pero con noticeSeen y lastSeen guardados. Al actualizar empieza una prueba completa.
+        let store = InMemoryPreferenceStore()
+        store.set("1", forKey: "trial.noticeSeen")
+        store.set(String(date(2027, 1, 20).timeIntervalSince1970), forKey: "trial.lastSeen")
+        let clock = Clock(date(2027, 1, 22, 9))
+        let m = manager(clock, store: store)
+        XCTAssertEqual(m.state(), .trial(daysLeft: 90))
+        XCTAssertTrue(m.noticeSeen, "no se repite la bienvenida")
+        XCTAssertEqual(m.trialEndDate(), date(2027, 4, 21, 0, 0, 0))
+        // Incluso pasada la fecha fija antigua (9 feb 2027) sigue en prueba.
+        clock.now = date(2027, 3, 1); XCTAssertEqual(m.state(), .trial(daysLeft: 52))
+    }
+
+    func testManagerFixesFutureFirstLaunchAndClockRollbackKeepsOldest() {
+        let clock = Clock(date(2026, 12, 1)), store = seeded(date(2028, 1, 1)), backup = InMemoryPreferenceStore()
+        let m = manager(clock, store: store, backup: backup)
+        XCTAssertEqual(m.state(), .trial(daysLeft: 90))
+        XCTAssertEqual(ts(store), clock.now.timeIntervalSince1970, "el valor futuro se corrige")
+        // Reloj atrás tras haber vencido: sigue vencida y firstLaunch no se «reinicia».
+        clock.now = date(2027, 6, 1); XCTAssertEqual(m.state(), .expired)
+        clock.now = date(2026, 12, 2); XCTAssertEqual(m.state(), .expired)
+        XCTAssertEqual(ts(store), date(2026, 12, 1).timeIntervalSince1970)
+    }
+
     func testNoticeAndDailyReminder() {
         let clock = Clock(date(2026, 12, 1)), m: LicenseManager
-        m = manager(clock)
+        m = manager(clock, store: InMemoryPreferenceStore())   // primer arranque: 1 dic 2026 → últimos días desde el 15 feb 2027
         XCTAssertFalse(m.noticeSeen); m.markNoticeSeen(); XCTAssertTrue(m.noticeSeen)
         XCTAssertFalse(m.takeDailyReminder(), "fuera de los últimos días no hay recordatorio")
-        clock.now = date(2027, 1, 30, 9)
+        _ = m.state()
+        clock.now = date(2027, 2, 20, 9)
         XCTAssertTrue(m.takeDailyReminder())
-        clock.now = date(2027, 1, 30, 20)
+        clock.now = date(2027, 2, 20, 20)
         XCTAssertFalse(m.takeDailyReminder(), "una vez por día")
-        clock.now = date(2027, 1, 31, 8)
+        clock.now = date(2027, 2, 21, 8)
         XCTAssertTrue(m.takeDailyReminder())
-        clock.now = date(2027, 2, 11)
+        clock.now = date(2027, 3, 1)
         XCTAssertFalse(m.takeDailyReminder(), "vencida: no es recordatorio")
     }
 
@@ -214,7 +301,7 @@ final class LicenseTests: XCTestCase {
     }
 
     func testRunOperationAllowedDuringTrialAndLastDays() async throws {
-        for d in [date(2026, 11, 11), date(2027, 2, 9, 23, 59, 59)] {
+        for d in [date(2026, 11, 11), date(2027, 2, 8, 23, 59, 59)] {
             let m = manager(Clock(d))
             let fs = FakeFS(), e = FakeEngines(fs: fs), dir = URL(fileURLWithPath: "/tmp/x")
             let run = RunOperation(pdf: e, image: e, archive: e, media: e, ocr: e, fileSystem: fs, history: FakeHistory(), gate: m)
@@ -229,7 +316,7 @@ final class LicenseTests: XCTestCase {
                         actions: [.moveTo(folder: docs.appendingPathComponent("Capturas"), subfolder: .none)])
         let fs = FakeFS(), store = FakeRuleStore(), history = FakeHistory(), watcher = FakeWatcher()
         store.rules = [rule]
-        let clock = Clock(date(2027, 2, 9, 23, 59, 0))
+        let clock = Clock(date(2027, 2, 8, 23, 59, 0))
         let m = manager(clock)
         let runner = RuleRunner(store: store, fileSystem: fs, detector: FakeDetector(), image: FakeEngines(fs: fs), history: history,
                                 watcher: watcher, stability: .milliseconds(5), sweepInterval: .seconds(3600), gate: m)
@@ -241,7 +328,7 @@ final class LicenseTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertTrue(fs.files.contains(docs.appendingPathComponent("Capturas/Captura 1.png").path), "en prueba la regla actúa")
 
-        clock.now = date(2027, 2, 10, 0, 0, 1)   // vence
+        clock.now = date(2027, 2, 9, 0, 0, 1)   // vence
         fs.files.insert(two.path); watcher.send(two, in: downloads)
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertTrue(fs.files.contains(two.path), "vencida: el archivo no se mueve")
@@ -276,7 +363,10 @@ final class LicenseTests: XCTestCase {
         let pub = try XCTUnwrap(LicenseConfig.publicKey())
         XCTAssertEqual(try LicenseVerifier.verify(cabrio, forApp: "cabrio", publicKey: pub).get().name, "Prueba")
         XCTAssertEqual(LicenseVerifier.verify(ferry, forApp: "cabrio", publicKey: pub), .failure(.wrongApp))
-        let m = LicenseManager(publicKey: pub, store: InMemoryPreferenceStore(), now: { Date(timeIntervalSince1970: 1_900_000_000) })
+        let clock = Clock(Date(timeIntervalSince1970: 1_800_000_000))
+        let m = LicenseManager(publicKey: pub, store: InMemoryPreferenceStore(), backup: InMemoryPreferenceStore(), now: { clock.now })
+        XCTAssertEqual(m.state(), .trial(daysLeft: 90))
+        clock.now = clock.now.addingTimeInterval(91 * 86_400)
         XCTAssertEqual(m.state(), .expired)
         XCTAssertThrowsError(try m.activate(ferry))
         XCTAssertEqual(m.state(), .expired)

@@ -13,12 +13,39 @@ struct UserDefaultsPreferenceStore: PreferenceStore, @unchecked Sendable {
     }
 }
 
+/// Archivo pequeño (JSON) en Application Support con el segundo registro de `firstLaunch`.
+struct FilePreferenceStore: PreferenceStore, @unchecked Sendable {
+    var url: URL
+    static var `default`: FilePreferenceStore {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        return FilePreferenceStore(url: base.appendingPathComponent("Cabrio/license.json"))
+    }
+    private func load() -> [String: String] {
+        (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+    }
+    func string(forKey key: String) -> String? { load()[key] }
+    func set(_ value: String?, forKey key: String) {
+        var all = load()
+        all[key] = value
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(all) { try? data.write(to: url, options: .atomic) }
+    }
+}
+
 /// Textos del estado de la prueba (puros, para probarlos sin ventanas).
 enum TrialText {
+    /// Fecha larga con la región de la persona.
+    static func date(_ d: Date?) -> String {
+        guard let d else { return "—" }
+        let f = DateFormatter(); f.dateStyle = .long; f.timeStyle = .none
+        return f.string(from: d)
+    }
+
     static func footer(_ state: TrialState) -> String? {
         switch state {
         case .licensed: return nil
-        case .trial(let d): return L("Versión de prueba · quedan %d días · Premium: %@", d, LicenseConfig.priceText)
+        case .trial(let d): return L("Versión de prueba · quedan %d días de %d · Premium: %@", d, LicenseConfig.trialDays, LicenseConfig.priceText)
         case .lastDays(let d):
             return d == 1 ? L("Versión de prueba · último día · Premium: %@", LicenseConfig.priceText)
                           : L("Quedan %d días de prueba · Premium: %@", d, LicenseConfig.priceText)
@@ -53,6 +80,9 @@ final class LicenseController: ObservableObject {
         self.state = manager.state()
         self.holder = manager.license?.name
     }
+
+    /// Último día de la prueba de esta persona.
+    var trialEnd: Date? { manager.trialEndDate() }
 
     var isExpired: Bool { state == .expired }
 

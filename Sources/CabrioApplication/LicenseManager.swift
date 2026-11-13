@@ -16,6 +16,7 @@ public struct OpenGate: ExecutionGate {
 public final class LicenseManager: ExecutionGate, @unchecked Sendable {
     enum Key {
         static let license = "license.key"
+        static let firstLaunch = "trial.firstLaunch"
         static let lastSeen = "trial.lastSeen"
         static let noticeSeen = "trial.noticeSeen"
         static let lastReminder = "trial.lastReminderDay"
@@ -24,16 +25,20 @@ public final class LicenseManager: ExecutionGate, @unchecked Sendable {
     private let appID: String
     private let publicKey: P256.Signing.PublicKey?
     private let store: PreferenceStore
+    /// Segundo lugar, independiente, donde se guarda `firstLaunch` (archivo en Application Support en la app).
+    private let backup: PreferenceStore
     private let now: @Sendable () -> Date
     private let calendar: Calendar
     private let lock = NSLock()
     private var cache: (key: String, payload: LicensePayload?)?
 
     public init(appID: String = LicenseConfig.appID, publicKey: P256.Signing.PublicKey?, store: PreferenceStore,
+                backup: PreferenceStore = InMemoryPreferenceStore(),
                 now: @escaping @Sendable () -> Date = { Date() }, calendar: Calendar = .current) {
         self.appID = appID
         self.publicKey = publicKey
         self.store = store
+        self.backup = backup
         self.now = now
         self.calendar = calendar
     }
@@ -56,8 +61,34 @@ public final class LicenseManager: ExecutionGate, @unchecked Sendable {
             let current = now()
             let seen = store.string(forKey: Key.lastSeen).flatMap(Double.init).map(Date.init(timeIntervalSince1970:))
             if let seen, seen > current {} else { store.set(String(current.timeIntervalSince1970), forKey: Key.lastSeen) }
-            return TrialPolicy.state(now: current, lastSeen: seen, licensed: storedLicense() != nil, calendar: calendar)
+            let first = resolveFirstLaunch(effectiveNow: max(current, seen ?? current))
+            return TrialPolicy.state(now: current, firstLaunch: first, lastSeen: seen, licensed: storedLicense() != nil, calendar: calendar)
         }
+    }
+
+    /// Último día de la prueba de esta persona (para «hasta el <fecha>»).
+    public func trialEndDate() -> Date? {
+        lock.withLock {
+            let current = now()
+            let seen = store.string(forKey: Key.lastSeen).flatMap(Double.init).map(Date.init(timeIntervalSince1970:))
+            return TrialPolicy.endDate(firstLaunch: resolveFirstLaunch(effectiveNow: max(current, seen ?? current)), calendar: calendar)
+        }
+    }
+
+    /// `firstLaunch` redundante: se usa el más antiguo de los dos registros y se recrea el que falte.
+    /// Sin ninguno (primer arranque o migración desde la prueba de fecha fija) empieza ahora. Un valor futuro se corrige.
+    private func resolveFirstLaunch(effectiveNow: Date) -> Date {
+        func read(_ s: PreferenceStore) -> Date? {
+            guard let v = s.string(forKey: Key.firstLaunch).flatMap(Double.init), v.isFinite else { return nil }
+            return Date(timeIntervalSince1970: v)
+        }
+        let found = [read(store), read(backup)].compactMap { $0 }
+        var first = found.min() ?? effectiveNow
+        if first > effectiveNow { first = effectiveNow }
+        let text = String(first.timeIntervalSince1970)
+        if store.string(forKey: Key.firstLaunch) != text { store.set(text, forKey: Key.firstLaunch) }
+        if backup.string(forKey: Key.firstLaunch) != text { backup.set(text, forKey: Key.firstLaunch) }
+        return first
     }
 
     public func check() throws {

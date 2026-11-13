@@ -219,7 +219,6 @@
 "Usa {name}, {n}, {n:3}, {date}, {created} o {parent}." = "Use {name}, {n}, {n:3}, {date}, {created} or {parent}.";
 "Ver la bienvenida" = "Show the welcome";
 "Versión %@" = "Version %@";
-"Versión de prueba (tester): gratis durante el periodo de prueba." = "Trial version (tester): free during the trial period.";
 "Video" = "Video";
 "Vigilar" = "Watch";
 "Ya existe «%@»." = "“%@” already exists.";
@@ -267,7 +266,7 @@
 "Esa clave es de otra app. Necesitas una clave de Cabrio." = "That key is for a different app. You need a Cabrio key.";
 "Esta clave ya está activada." = "This key is already activated.";
 "El periodo de prueba terminó. Activa Cabrio Premium para seguir usándola; tus archivos no se han tocado." = "The trial period has ended. Activate Cabrio Premium to keep using it; your files have not been touched.";
-"Versión de prueba · quedan %d días · Premium: %@" = "Trial version · %d days left · Premium: %@";
+"Versión de prueba · quedan %d días de %d · Premium: %@" = "Trial version · %d of %d days left · Premium: %@";
 "Versión de prueba · último día · Premium: %@" = "Trial version · last day · Premium: %@";
 "Quedan %d días de prueba · Premium: %@" = "%d trial days left · Premium: %@";
 "El periodo de prueba terminó" = "The trial period has ended";
@@ -278,7 +277,7 @@
 "Introducir clave…" = "Enter key…";
 "Premium activado · %@" = "Premium activated · %@";
 "Estás usando una versión de prueba (tester)" = "You are using a trial (tester) version";
-"Cabrio está en periodo de prueba hasta el 9 de febrero de 2027. Es gratis durante este periodo y nos ayudas a mejorarla. Después, cada app costará %@ (pago único). Tus archivos nunca se tocan ni se pierden." = "Cabrio is in its trial period until February 9, 2027. It is free during this period and you help us improve it. After that, each app will cost %@ (one-time payment). Your files are never touched or lost.";
+"Cabrio está en periodo de prueba: úsala gratis durante %d días (hasta el %@) y ayúdanos a mejorarla. Después, cada app costará %@ (pago único). Tus archivos nunca se tocan ni se pierden." = "Cabrio is in its trial period: use it free for %d days (until %@) and help us improve it. After that, each app will cost %@ (one-time payment). Your files are never touched or lost.";
 "Más información / Obtener premium" = "More information / Get premium";
 "Entendido" = "Got it";
 "Introducir clave de licencia" = "Enter license key";
@@ -291,6 +290,8 @@
 "Licencia" = "License";
 "Estado" = "Status";
 "Quitar licencia" = "Remove license";
-"La prueba termina el 9 de febrero de 2027. Cabrio es gratis durante el periodo de prueba; después, cada app costará %@ (pago único)." = "The trial ends on February 9, 2027. Cabrio is free during the trial period; after that, each app will cost %@ (one-time payment).";
+"Tu prueba gratuita de %d días, contados desde la primera vez que abriste Cabrio, termina el %@. Después, cada app costará %@ (pago único)." = "Your free %d-day trial, counted from the first time you opened Cabrio, ends on %@. After that, each app will cost %@ (one-time payment).";
+"Tu prueba de %d días terminó el %@." = "Your %d-day trial ended on %@.";
+"Versión de prueba (tester): gratis durante %d días desde la primera vez que la abres." = "Trial version (tester): free for %d days from the first time you open it.";
 "Versión de prueba" = "Trial version";
 "Licencia de Cabrio" = "Cabrio license";

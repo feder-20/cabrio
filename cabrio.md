@@ -432,7 +432,7 @@ Cabrio/
 
 - **Venta directa:** app notarizada con Sparkle, licencias con un *merchant of record* (Paddle o Lemon Squeezy, decisión pendiente) y un proveedor de respaldo.
 - **Mac App Store:** versión con sandbox; compra dentro de la app para Pro.
-- **Modelo:** periodo de prueba (tester) gratuito hasta el 9 de febrero de 2027; después, 10 USD por app, pago único, con clave de licencia verificada sin conexión (0.10.0).
+- **Modelo:** periodo de prueba (tester) gratuito de 90 días por persona, contados desde la primera vez que abre la app (0.10.1; en 0.10.0 era una fecha fija); después, 10 USD por app, pago único, con clave de licencia verificada sin conexión.
 - **Licencia en la app:** clave firmada (ECDSA P-256) verificada sin conexión; ver `Sources/CabrioDomain/Licensing.swift`.
 
 ---

@@ -45,7 +45,7 @@ final class WindowPresenter {
     /// Aviso de prueba (primer arranque o recordatorio diario).
     func showNotice(state: TrialState) {
         notice?.close()
-        let view = TrialNoticeView(state: state, onOK: { [weak self] in self?.notice?.close() },
+        let view = TrialNoticeView(state: state, trialEnd: LicenseController.shared.trialEnd, onOK: { [weak self] in self?.notice?.close() },
                                    onMore: { [weak self] in LicenseController.shared.openPurchase(); self?.notice?.close() })
         let w = NSWindow(contentViewController: NSHostingController(rootView: view))
         w.title = L("Versión de prueba")

@@ -4,8 +4,8 @@ import CryptoKit
 /// Constantes del periodo de prueba y la licencia (ver SPEC de ChocolitosLicense). Un solo lugar para cambiarlas.
 public enum LicenseConfig {
     public static let appID = "cabrio"
-    /// Último día de la prueba: 9 de febrero de 2027 (hora local, hasta las 23:59:59).
-    public static let trialEndYear = 2027, trialEndMonth = 2, trialEndDay = 9
+    /// Duración de la prueba por persona, contada desde la primera vez que abre la app (`firstLaunch`).
+    public static let trialDays = 90
     public static let priceText = "10 USD"
     public static let purchaseURL = URL(string: "https://chocolitossoft.com/premium")!
     public static let publicKeySPKIBase64 =
@@ -27,20 +27,29 @@ public enum TrialState: Equatable, Sendable {
 }
 
 /// Único punto de verdad del estado de la prueba. Sin UI ni reloj propio: todo entra por parámetro.
+/// D0 = día local de `firstLaunch`; la prueba cubre D0…D0+89 y D0+90 (00:00) ya está vencida.
 public enum TrialPolicy {
     /// - Parameters:
+    ///   - firstLaunch: primera vez que la persona abrió la app (si está en el futuro respecto al reloj efectivo, se usa este).
     ///   - lastSeen: la fecha más alta que la app ha visto; retrasar el reloj no revive la prueba.
-    public static func state(now: Date, lastSeen: Date?, licensed: Bool, calendar: Calendar = .current) -> TrialState {
+    public static func state(now: Date, firstLaunch: Date, lastSeen: Date?, licensed: Bool, calendar: Calendar = .current) -> TrialState {
         if licensed { return .licensed }
         let effective = max(now, lastSeen ?? now)
-        let today = calendar.startOfDay(for: effective)
-        guard let endDay = calendar.date(from: DateComponents(year: LicenseConfig.trialEndYear,
-                                                              month: LicenseConfig.trialEndMonth,
-                                                              day: LicenseConfig.trialEndDay)),
-              let days = calendar.dateComponents([.day], from: today, to: endDay).day else { return .expired }
-        let daysLeft = days + 1   // el último día cuenta como «queda 1 día»
-        if daysLeft <= 0 { return .expired }
+        let first = min(firstLaunch, effective)
+        guard let end = trialEndDay(firstLaunch: first, calendar: calendar),
+              let daysLeft = calendar.dateComponents([.day], from: calendar.startOfDay(for: effective), to: end).day,
+              daysLeft > 0 else { return .expired }
         return daysLeft <= LicenseConfig.lastDaysThreshold ? .lastDays(daysLeft: daysLeft) : .trial(daysLeft: daysLeft)
+    }
+
+    /// Primer día ya vencido (D0+90, 00:00 locales).
+    public static func trialEndDay(firstLaunch: Date, calendar: Calendar = .current) -> Date? {
+        calendar.date(byAdding: .day, value: LicenseConfig.trialDays, to: calendar.startOfDay(for: firstLaunch))
+    }
+
+    /// Último día de uso de la prueba (D0+89, inicio del día) para mostrar «hasta el <fecha>».
+    public static func endDate(firstLaunch: Date, calendar: Calendar = .current) -> Date? {
+        trialEndDay(firstLaunch: firstLaunch, calendar: calendar).flatMap { calendar.date(byAdding: .day, value: -1, to: $0) }
     }
 }
 
